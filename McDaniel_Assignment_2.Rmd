@@ -1,0 +1,143 @@
+---
+title: 'Directed Study Assignment #2'
+author: "Darius McDaniel"
+date: "October 22, 2015"
+output: word_document
+---
+
+## First Function
+
+
+Given a  lat/lon pair and a distance in miles the functuon **myPWS** outputs three type of information: 
+
+1) The url used to pull information from Wunderground.
+
+2) The location (city, state and country).
+
+3) A data frame with the nearby Personal Weather Stations that are less than the specified number of miles away. You may parse XML or JSON to get the job done. 
+
+Here is the function and some examples:
+
+
+```{r}
+
+myPWS <- function(lat,lon,dist) {
+  
+  library(RJSONIO)
+  library(RCurl)
+  
+  #Main part of api
+  api <- paste("http://api.wunderground.com/api/b7dbd5ef0f04904b/geolookup/q/",sep="")
+
+  #lat and lon combined
+  latlon <- paste(lat,lon,sep = ",")
+
+  url <- paste(api,latlon, ".json",sep = "")
+  addr <- getURL(url)
+  
+  #JSON parsed
+  url.json <- fromJSON(addr)
+  
+  #Used to count for correct parsing
+  #str(url.json,2)
+  
+  
+  #Gives parsed CITY,State and Country unlisted as data object
+  unlist(url.json$location[6]) -> CITY 
+  unlist(url.json$location[5]) -> STATE
+  unlist(url.json$location[4]) -> COUNTRY
+  
+  #Below gives the Location for output
+  Location <- paste(CITY,STATE,COUNTRY,sep = " ")
+  
+  #This gives us all personal weather stations data in area specified by lat and lon
+  pws <- do.call(rbind,url.json$location$nearby_weather_stations$pws[[1]])
+  pwsDF <- data.frame(pws)
+ 
+  #Use dplyr for quick filter of the stations based in distance specified by user
+  library(dplyr)
+  
+  stations_ <- pwsDF %>% 
+    filter(distance_mi < dist) %>% 
+    mutate(stations = id) %>%
+    select(stations,neighborhood, distance_mi)
+  
+  stations1 <-list(stations_)
+  stations <- do.call(rbind,stations1)
+
+  #This returns url, location and station data for lat lon
+  return(list(url=url,Location=Location,stations=stations))
+ 
+ 
+  }
+  
+#QA
+
+   myPWS(lat=33.79757,lon=-84.32332,dist=2) # 1518 Clifton Rd, Atl GA 30322
+   myPWS(lat=-23.533333,lon=-46.616666,dist=3)   # Sao Paulo Brazil
+   myPWS(lat=48.86666,lon=2.333333,dist=1)  # Paris, France
+   myPWS(lat=42.3313889,lon=-83.045833,dist=5) # Detroit, Michigan
+   myPWS(lat=40.714166,lon=-74.00638,dist=5) # New York, New York
+  
+
+
+```
+
+## Second Function
+Below is a function called **WeatherPWS**. This accepts a vector of station names as input from the function **myPWS**. 
+For each station this function gives back basic weather information such as (name, weather, temp_f, wind_string, wind_mph, feelslike_f). 
+
+Here is the function and some examples:
+
+```{r}
+
+
+getWeatherPWS <- function(stations) {
+  library(RJSONIO)
+  library(RCurl)
+  
+   masterlist <- list() # Blank master list
+   jj = 1 # Counter for incrementing the masterlist
+  
+
+  for (ii in 1:length(stations)) {
+    
+    base_string <- "http://api.wunderground.com/api/b7dbd5ef0f04904b/forecast/geolookup/conditions/q/pws:" 
+   
+    urlPWS <- paste(base_string,stations[ii], ".json",sep = "")
+    base_string_URL <- getURL(urlPWS)
+    
+    url.json <- fromJSON(base_string_URL)
+    #str(url.json,2)
+    
+    #Gives parsed station_id, weather,temp_f, wind_string, wind_mph,feelslike_f and precip_daily_in  unlisted as data object
+    unlist(url.json$current_observation$station_id) -> station_id 
+    unlist(url.json$current_observation$weather) -> weather 
+    unlist(url.json$current_observation$temp_f) -> temp_f
+    unlist(url.json$current_observation$wind_string) -> wind_string
+    unlist(url.json$current_observation$wind_mph) -> wind_mph
+    unlist(url.json$current_observation$feelslike_f) -> feelslike_f
+    unlist(url.json$current_observation$precip_today_in) -> precip_today_in
+    
+    masterlist[[jj]] <- list(station_id=station_id,weather=weather,temp_f=temp_f,wind_string=wind_string,wind_mph=wind_mph,feelslike_f=feelslike_f,precip_today_in=precip_today_in)
+    jj = jj + 1
+    
+    
+  }
+   pws_weather <-  do.call(rbind,masterlist)
+    return(pws_weather)
+}
+   
+   
+   
+   myPWS(lat=33.79757,lon=-84.32332,dist=2)$stations$station[1:10] -> inputs 
+   getWeatherPWS(inputs)
+
+
+   myPWS(lat=40.714166,lon=-74.00638,dist=5)$stations$station -> inputs
+   getWeatherPWS(inputs)
+
+ 
+
+```
+
